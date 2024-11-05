@@ -1,0 +1,55 @@
+{
+    "workflow_name": "ImageProcessing",
+    "num_stages": 5,
+    "0": {
+        "stage_name": "ImageProcessingFlip_jol",
+        "parents": [],
+        "children": [1],
+        "allow_parallel": "true",
+        "input_files": ["sample_10mb.jpeg"],
+        "output_files": ["flip-sample_10mb.jpeg"],
+        "read_pattern": ["read_table"],
+        "orca_input": {"input_image": "sample_10mb.jpeg", "init_bucket": "imageprocessing.storage", "final_bucket": "imageprocessing.storage", "orca": {"up_bucket": "imageprocessing.storage", "down_bucket": "imageprocessing.storage", "redis_host": "celebi-redis.bqzfxo.ng.0001.use1.cache.amazonaws.com", "redis_port": "6379", "up_type": "s3", "down_type": "s3"}}
+    },
+    "1": {
+        "stage_name": "ImageProcessingRotate_jol",
+        "parents": [0],
+        "children": [2],
+        "allow_parallel": "true",
+        "input_files": ["flip-sample_10mb.jpeg"],
+        "output_files": ["rotate-flip-sample_10mb.jpeg"],
+        "read_pattern": ["read"],
+		"orca_input": {"data": {"imageName": "flip-sample_10mb.jpeg", "final_bucket": "imageprocessing.storage", "byte_data": null}, "orca": {"up_bucket": "imageprocessing.storage", "down_bucket": "imageprocessing.storage", "redis_host": "celebi-redis.bqzfxo.ng.0001.use1.cache.amazonaws.com", "redis_port": "6379", "up_type": "s3", "down_type": "s3"}}
+    },
+    "2": {
+        "stage_name": "ImageProcessingFilter_jol",
+        "parents": [1],
+        "children": [3],
+        "allow_parallel": "true",
+        "input_files": ["rotate-flip-sample_10mb.jpeg"],
+        "output_files": ["filter-rotate-flip-sample_10mb.jpeg"],
+        "read_pattern": ["read"],
+		"orca_input": {"data": {"imageName": "rotate-flip-sample_10mb.jpeg", "final_bucket": "imageprocessing.storage", "byte_data": null}, "orca": {"up_bucket": "imageprocessing.storage", "down_bucket": "imageprocessing.storage", "redis_host": "celebi-redis.bqzfxo.ng.0001.use1.cache.amazonaws.com", "redis_port": "6379", "up_type": "s3", "down_type": "s3"}}
+    },
+    "3": {
+        "stage_name": "ImageProcessingConvert_jol",
+        "parents": [2],
+        "children": [4],
+        "allow_parallel": "true",
+        "input_files": ["filter-rotate-flip-sample_10mb.jpeg"],
+        "output_files": ["convert-filter-rotate-flip-sample_10mb.png"],
+        "read_pattern": ["read"],
+		"orca_input": {"data": {"imageName": "filter-rotate-flip-sample_10mb.jpeg", "final_bucket": "imageprocessing.storage", "byte_data": null}, "orca": {"up_bucket": "imageprocessing.storage", "down_bucket": "imageprocessing.storage", "redis_host": "celebi-redis.bqzfxo.ng.0001.use1.cache.amazonaws.com", "redis_port": "6379", "up_type": "s3", "down_type": "s3"}}
+    },
+    "4": {
+        "stage_name": "ImageProcessingResize_jol",
+        "parents": [3],
+        "children": [],
+        "allow_parallel": "true",
+        "input_files": ["convert-filter-rotate-flip-sample_10mb.png"],
+        "output_files": [],
+        "read_pattern": ["read"],
+		"orca_input": {"data": {"imageName": "convert-filter-rotate-flip-sample_10mb.png", "final_bucket": "imageprocessing.storage", "byte_data": null}, "orca": {"up_bucket": "imageprocessing.storage", "down_bucket": "imageprocessing.storage", "redis_host": "celebi-redis.bqzfxo.ng.0001.use1.cache.amazonaws.com", "redis_port": "6379", "up_type": "s3", "down_type": "s3"}}
+    },
+    "critical_path": [0, 1, 2, 3, 4]
+}

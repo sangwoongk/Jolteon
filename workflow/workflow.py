@@ -8,7 +8,7 @@ import numpy as np
 from stage import Stage, Status, PerfModel
 from perf_model import StagePerfModel, config_pairs, step_names, get_config_pairs
 from perf_model_dist import config_pairs as dist_config_pairs, get_config_pairs_dist
-from utils import MyThread, MyProcess, PCPSolver, extract_info_from_log, clear_data
+from utils import MyThread, MyProcess, PCPSolver, extract_info_from_log, clear_data, orca_extract_info_from_log
 
 class Workflow:
     def __init__(self, config_file, perf_model_type = 0, boto3_client_ = None) -> None:
@@ -32,8 +32,13 @@ class Workflow:
     def parse_config(self, config) -> None:
         num = config['num_stages']
         self.workflow_name = config['workflow_name']
+        self.is_orca = self.workflow_name in ['MLPipeline', 'ImageProcessing']  # swkim
+
         for i in range(num):
-            stage = Stage(self.workflow_name, config[str(i)]['stage_name'], i, self.perf_model_type)
+            func_name = None
+            if self.is_orca:    # swkim
+                func_name = config[str(i)]["stage_name"]
+            stage = Stage(self.workflow_name, config[str(i)]['stage_name'], i, self.perf_model_type, func_name_=func_name)
             self.stages.append(stage)
             
         for index, stage in enumerate(self.stages):
@@ -51,7 +56,12 @@ class Workflow:
                         
             if 'extra_args' in config[str(index)]:
                 stage.extra_args = config[str(index)]['extra_args']
-                        
+
+            # <<< swkim
+            if 'orca_input' in config[str(index)]:
+                stage.extra_args = config[str(index)]['orca_input']
+            # <<< swkim
+
             parents = config[str(index)]['parents']
             for p in parents:
                 stage.add_parent(self.stages[p])
@@ -257,14 +267,28 @@ class Workflow:
                             if ids_ == 0:
                                 time_list.append(result)
                                 continue
-                            info = extract_info_from_log(result[1])
-                            infos.append(info)
+                            # <<< swkim
                             rd = json.loads(result[0])
-                            if 'statusCode' not in rd:
-                                print(rd)
-                                raise Exception('Lambda execution error')
-                            rd = json.loads(rd['body'])
-                            l.append(rd['breakdown'])
+
+                            if self.is_orca:
+                                info = orca_extract_info_from_log(rd, result[1])
+                                infos.append(info)
+                                if 'data' not in rd:
+                                    print(rd)
+                                    raise Exception('Lambda execution error')
+
+                                l.append(rd['jolteon_res'])
+                            else:
+                                info = extract_info_from_log(result[1])
+                                infos.append(info)
+                                if 'statusCode' not in rd:
+                                    print(rd)
+                                    raise Exception('Lambda execution error')
+
+                                rd = json.loads(rd['body'])
+                                l.append(rd['breakdown'])
+                            # <<< swkim
+
                         times_list.append(l)
                     cost = 0
                     for info in infos:
@@ -572,6 +596,10 @@ class Workflow:
             cold_percent = 85
         elif self.workflow_name == 'tpcds/dsq95':
             cold_percent = 75
+        # <<< swkim
+        elif self.workflow_name == 'MLPipeline':
+            cold_percent = 60
+        # <<< swkim
         res = np.concatenate([stage.perf_model.params(cold_percent) for stage in self.stages])
         res = res.tolist()
         return res
@@ -710,8 +738,10 @@ class Workflow:
         func2_def = 'def constraint_func_2(x, p, b):\n' + '    return '
         if solver_type == 'scipy':
             s += 'def constraint_func(x, p, b):\n' + '    return '
-            if cons_mode == 'cost':
-                func2_def = 'def constraint_func_2(x, p):\n' + '    return '
+            # <<< swkim
+            # if cons_mode == 'cost': # Jolteon: error
+            #     func2_def = 'def constraint_func_2(x, p):\n' + '    return '
+            # <<< swkim
         else:
             s += 'def constraint_func(model):\n' + '    return '
             bound = ' - model.b <= 0'

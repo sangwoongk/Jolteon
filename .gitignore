@@ -198,3 +198,7 @@ funcs.py
 orion_config.json
 config.json
 **/data/*
+# <<< swkim
+results/
+test_bv.sh
+# <<< swkim

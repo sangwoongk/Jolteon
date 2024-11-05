@@ -1,0 +1,59 @@
+{
+    "workflow_name": "MLPipeline",
+    "num_stages": 5,
+    "0": {
+        "stage_name": "PipeImgProcess_jol",
+        "parents": [],
+        "children": [1],
+        "allow_parallel": "true",
+        "input_files": ["1.jpg"],
+        "output_files": ["1_processed.jpg"],
+        "read_pattern": ["read_table"],
+		"orca_input": {"image": "1.jpg", "init_bucket": "mlpipeline.storage", "final_bucket": "mlpipeline.storage",  "orca": {"up_bucket": "mlpipeline.storage", "down_bucket": "mlpipeline.storage", "redis_host": "celebi-redis.bqzfxo.ng.0001.use1.cache.amazonaws.com", "redis_port": "6379", "up_type": "s3", "down_type": "s3"}}
+    },
+    "1": {
+        "stage_name": "PipeObjDetect_jol",
+        "parents": [0],
+        "children": [2, 3, 4],
+        "allow_parallel": "true",
+        "input_files": ["1_processed.jpg"],
+        "output_files": ["1_processed_detected.jpg"],
+        "read_pattern": ["read"],
+		"orca_input": {"data": {"image": "1_processed.jpg", "init_bucket": "mlpipeline.storage", "final_bucket": "mlpipeline.storage", "byte_data": null}, "orca": {"up_bucket": "mlpipeline.storage", "down_bucket": "mlpipeline.storage", "redis_host": "celebi-redis.bqzfxo.ng.0001.use1.cache.amazonaws.com", "redis_port": "6379", "up_type": "s3", "down_type": "s3"}}
+    },
+    "2": {
+        "stage_name": "PipeHuman_jol",
+        "parents": [1],
+        "children": [],
+        "allow_parallel": "true",
+        "input_files": ["1_processed_detected.jpg"],
+        "output_files": [],
+        "read_pattern": ["read"],
+		"orca_input": {"data": {"image": "1_processed_detected.jpg", "init_bucket": "mlpipeline.storage", "final_bucket": "mlpipeline.storage", "object_classes": ["car"], "object_boxes": [[16.821304321289062, 139.9268798828125, 408.42913818359375, 337.4073791503906]], "byte_data": null},
+		"orca": {"up_bucket": "mlpipeline.storage", "down_bucket": "mlpipeline.storage", "redis_host": "celebi-redis.bqzfxo.ng.0001.use1.cache.amazonaws.com", "redis_port": "6379", "up_type": "s3", "down_type": "s3"}}
+    },
+    "3": {
+        "stage_name": "PipeVehicle_jol",
+        "parents": [1],
+        "children": [],
+        "allow_parallel": "true",
+        "input_files": ["1_processed_detected.jpg"],
+        "output_files": [],
+        "read_pattern": ["read"],
+		"orca_input": {"data": {"image": "1_processed_detected.jpg", "init_bucket": "mlpipeline.storage", "final_bucket": "mlpipeline.storage", "object_classes": ["car"], "object_boxes": [[16.821304321289062, 139.9268798828125, 408.42913818359375, 337.4073791503906]], "byte_data": null},
+		"orca": {"up_bucket": "mlpipeline.storage", "down_bucket": "mlpipeline.storage", "redis_host": "celebi-redis.bqzfxo.ng.0001.use1.cache.amazonaws.com", "redis_port": "6379", "up_type": "s3", "down_type": "s3"}}
+    },
+    "4": {
+        "stage_name": "PipeLight_jol",
+        "parents": [1],
+        "children": [],
+        "allow_parallel": "true",
+        "input_files": ["1_processed_detected.jpg"],
+        "output_files": [],
+        "read_pattern": ["read"],
+		"orca_input": {"data": {"image": "1_processed_detected.jpg", "init_bucket": "mlpipeline.storage", "final_bucket": "mlpipeline.storage", "object_classes": ["car"], "object_boxes": [[16.821304321289062, 139.9268798828125, 408.42913818359375, 337.4073791503906]], "byte_data": null},
+		"orca": {"up_bucket": "mlpipeline.storage", "down_bucket": "mlpipeline.storage", "redis_host": "celebi-redis.bqzfxo.ng.0001.use1.cache.amazonaws.com", "redis_port": "6379", "up_type": "s3", "down_type": "s3"}}
+    },
+    "critical_path": [0, 1, 2],
+    "secondary_path": [0, 1, 4]
+}

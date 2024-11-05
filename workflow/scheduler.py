@@ -11,7 +11,7 @@ import numpy as np
 from workflow import Workflow
 from perf_model import config_pairs
 from perf_model_dist import eq_vcpu_alloc
-from utils import PriorityQueue, MyQueue, PCPSolver, extract_info_from_log, clear_data
+from utils import PriorityQueue, MyQueue, PCPSolver, extract_info_from_log, clear_data, orca_extract_info_from_log, orca_save_result
 
 # scheduler is responsible for tuning the launch time,
 # number of function invocation and resource configuration
@@ -68,6 +68,8 @@ class Scheduler(ABC):
             for i in range(8):
                 if num_vcpus[i] < 0.5:
                     num_vcpus[i] = 0.5
+        elif self.workflow.workflow_name == 'MLPipeline':   # swkim
+            hi = 1
 
         for i, stage in enumerate(self.workflow.stages):
             if stage.allow_parallel is False:
@@ -222,25 +224,38 @@ class Jolteon(Scheduler):
             print('Load time:', t1-t0, 's\n')
 
         t0 = time.time()
-        self.solver = PCPSolver(2*len(self.workflow.stages), objective_func, constraint_func, 
-                                self.bound, self.obj_params, self.cons_params, 
-                                risk=self.risk, confidence_error=self.confidence_error,
-                                ftol=self.ftol, k_configs=self.vcpu_configs, d_configs=self.parallel_configs, 
-                                bound_type=self.bound_type, 
-                                need_probe=self.need_probe, probe_depth=self.probe_depth)
+        # <<< swkim
+        if self.workflow.secondary_path is not None:
+            self.solver = PCPSolver(2*len(self.workflow.stages), objective_func, constraint_func, 
+                                    self.bound, self.obj_params, self.cons_params, 
+                                    risk=self.risk, confidence_error=self.confidence_error, constraint_2=constraint_func_2,
+                                    ftol=self.ftol, k_configs=self.vcpu_configs, d_configs=self.parallel_configs, 
+                                    bound_type=self.bound_type, 
+                                    need_probe=self.need_probe, probe_depth=self.probe_depth)
+        else:
+            self.solver = PCPSolver(2*len(self.workflow.stages), objective_func, constraint_func, 
+                                    self.bound, self.obj_params, self.cons_params, 
+                                    risk=self.risk, confidence_error=self.confidence_error,
+                                    ftol=self.ftol, k_configs=self.vcpu_configs, d_configs=self.parallel_configs, 
+                                    bound_type=self.bound_type, 
+                                    need_probe=self.need_probe, probe_depth=self.probe_depth)
+        # <<< swkim
+ 
         res = self.solver.iter_solve(init_vals, x_bound)
         t1 = time.time()
         # print('Final bound:', self.solver.bound)
-        print(res)
+        print('Solver res:', res)
         print('Solve time:', t1-t0, 's\n')
 
         self.solver.bound = self.bound
         
         self.num_funcs, self.num_vcpus = self.round_config(res['x'])
+        print('[after round] num_func:', self.num_funcs, 'num_vcpu', self.num_vcpus)
 
         t0 = time.time()
         self.num_funcs, self.num_vcpus = self.solver.probe(self.num_funcs, self.num_vcpus)
         t1 = time.time()
+        print('[after probe] num_func:', self.num_funcs, 'num_vcpu', self.num_vcpus)
         print('Probe time:', t1-t0, 's\n')
 
         self.num_funcs, self.num_vcpus = self.check_config(self.num_funcs, self.num_vcpus)
@@ -260,7 +275,15 @@ class Jolteon(Scheduler):
         print()
 
     def set_config(self, real=True):
-        mem_list = [int(self.num_vcpus[i]*1792) for i in range(len(self.num_vcpus))]
+        # mem_list = [int(self.num_vcpus[i]*1792) for i in range(len(self.num_vcpus))]
+        # <<< swkim
+        mem_list = []
+        for i in range(len(self.num_vcpus)):
+            if self.num_vcpus[i] < 6:
+                mem_list.append(int(self.num_vcpus[i] * 1792))
+            elif self.num_vcpus[i] == 6:
+                mem_list.append(10240)
+        # <<< swkim
         self.workflow.update_workflow_config(mem_list, self.num_funcs, real)
 
     def predict(self, file_path='./config.json'):
@@ -807,16 +830,21 @@ def main():
     parser.add_argument('-f', '--config_file', type=int, default=0, help='read existing config file for orion')
     parser.add_argument('-r', '--real_run', type=int, default=1, help='real run or not, 1 or 0')
     parser.add_argument('-ss', '--sample_size', type=int, default=0, help='sample size, used by jolteon')
+    parser.add_argument('-sd', '--subdir', type=str, default='', help='subdir of result file, used by orca')
 
     args = parser.parse_args()
 
     workflow_file = ''
     if args.workflow == 'ml':
-        workflow_file = 'ML-pipeline.json'
+        workflow_file = 'jol_ML-pipeline.json'
     elif args.workflow == 'tpcds':
         workflow_file = 'tpcds-dsq95.json'
     elif args.workflow == 'video':
         workflow_file = 'Video-analytics.json'
+    # <<< swkim
+    elif args.workflow == 'MLPipeline':
+        workflow_file = 'MLPipeline.json'
+    # <<< swkim
     else:
         raise ValueError('Invalid workflow')
     
@@ -961,6 +989,24 @@ def main():
                           24, 0.8, 8, 0.8, 24, 0.8, 1, 0.8]
                 x_bound = [(8, 48), (0.49, 1.1), (1, 2), (0.49, 1.1), (8, 48), (0.49, 1.1), (4, 16), (0.49, 1.1),
                            (8, 48), (0.49, 1.1), (4, 8), (0.49, 1.1), (8, 48), (0.49, 1.1), (1, 2), (0.49, 1.1)]
+            # <<< swkim
+            elif args.workflow == 'MLPipeline':
+                # profile file: yes_parallel_read_MLPipeline_profile.json
+                vcpu_range = [0.5, 1, 1.5, 1.7, 2, 2.2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5]
+                parallel_range = [1]
+                scheduler.set_config_range(vcpu_range, parallel_range)
+                # x_init: [parallel, vCPU] 의 반복
+                x_init = [1, 0.5, 1, 1, 1, 2, 1, 1, 1, 2]
+                # x_bound: [(parallel_min, parallel_max), (vCPU min, vCPU max)] 반복
+                para_min = 0.5
+                para_max = 1.1
+                # good
+                # x_bound = [(para_min, para_max), (0.4, 3.6), (para_min, para_max), (0.4, 5.6),
+                # (para_min, para_max), (1.9, 5.6), (para_min, para_max), (1.4, 4.6), (para_min, para_max), (1.9, 5.6)]
+
+                x_bound = [(para_min, para_max), (0.4, 3.6), (para_min, para_max), (0.4, 5.6),
+                (para_min, para_max), (1.9, 5.6), (para_min, para_max), (1.4, 5.6), (para_min, para_max), (1.9, 5.6)]
+            # <<< swkim
 
             sample_size = args.sample_size
             if sample_size == 0:
@@ -1016,36 +1062,75 @@ def main():
             clear_dir = wf.workflow_name + '/stage'
             clear_dir = clear_dir.replace('-', '_')
             clear_data(clear_dir)
-            t0 = time.time()
-            res = wf.lazy_execute()
-            t1 = time.time()
-            print('Time:', t1 - t0)
-            # print(res)
-            infos = []
-            time_list = []
-            times_list = []
-            for ids, r in enumerate(res):
-                l = []
-                for ids_, result in enumerate(r):
-                    if ids_ == 0:
-                        time_list.append(result)
-                        continue
-                    info = extract_info_from_log(result[1])
-                    infos.append(info)
-                    
-                    rd = json.loads(result[0])
-                    if 'statusCode' not in rd:
-                        print(rd)
-                    rd = json.loads(rd['body'])
-                    l.append(rd['breakdown'])
-                times_list.append(l)
-            cost = 0
-            for info in infos:
-                cost += info['bill']
-            print('Cost:', cost, '$')
-            for idx, t in enumerate(time_list):
-                print('Stage', idx, 'time:', t)
-                print(times_list[idx])
+
+            # <<< swkim
+            cold_runs = 2
+            for c in range(cold_runs):
+                print(f'({c} cold run)')
+                t0 = time.time()
+                res = wf.lazy_execute()
+                t1 = time.time()
+                time.sleep(5)
+                wf.init_stage_status()
+
+            perf_cost = []
+            runs = 100
+            for r in range(runs):
+                print(f'({r} warm run)')
+                print(f'num_funcs: {scheduler.num_funcs}, num_vcpus: {scheduler.num_vcpus}')
+                t0 = time.time()
+                res = wf.lazy_execute()
+                t1 = time.time()
+                print('Time:', t1 - t0)
+                print('Time (ms):', (t1 - t0) * 1000)
+                # print(res)
+                infos = []
+                time_list = []
+                times_list = []
+                for ids, r in enumerate(res):
+                    l = []
+                    for ids_, result in enumerate(r):
+                        if ids_ == 0:
+                            time_list.append(result)
+                            continue
+                        rd = json.loads(result[0])
+
+                        if wf.is_orca:
+                            info = orca_extract_info_from_log(rd, result[1])
+                            infos.append(info)
+                            if 'data' not in rd:
+                                print(rd)
+                            l.append(rd['jolteon_res'])
+                        else:
+                            info = extract_info_from_log(result[1])
+                            infos.append(info)
+                            if 'statusCode' not in rd:
+                                print(rd)
+                            rd = json.loads(rd['body'])
+                            l.append(rd['breakdown'])
+                    times_list.append(l)
+                cost = 0
+                for info in infos:
+                    cost += info['bill']
+                print('Cost:', cost, '$')
+                for idx, t in enumerate(time_list):
+                    print('Stage', idx, 'time:', t)
+                    print(times_list[idx])
+
+                perf_cost.append({'cost': cost, 'e2e': (t1 - t0) * 1000})
+                time.sleep(5)
+                wf.init_stage_status()
+
+
+            file_prefix = f'{args.bound_type}_{args.bound_value}'
+            prof_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            if args.subdir != '':
+                prof_dir = os.path.join(prof_dir, 'results', wf.workflow_name, args.subdir)
+            else:
+                prof_dir = os.path.join(prof_dir, 'results', wf.workflow_name)
+            orca_save_result(prof_dir, file_prefix, scheduler.num_vcpus, x_bound, perf_cost)
+            # <<< swkim
+
         
     wf.close_pools()
 

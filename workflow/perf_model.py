@@ -36,6 +36,19 @@ def get_config_pairs(wf_name):
                  [1437, 16], [1437, 24], [1437, 32], [1437, 48], [1437, 64],
                  [1617, 16], [1617, 24], [1617, 32], [1617, 48], [1617, 64],
                  [1792, 8], [1792, 16], [1792, 24], [1792, 32], [1792, 48], [1792, 64]]
+    # <<< swkim
+    elif wf_name == 'MLPipeline':   # [1] not operates because of allow_parallel: false
+        pairs = [
+                    [3072, 1], [3072, 2], [3072, 4], [3072, 8],
+                    [3584, 1], [3584, 2], [3584, 4], [3584, 8],
+                    [5120, 1], [5120, 2], [5120, 4], [5120, 8],
+                    [6144, 1], [6144, 2], [6144, 4], [6144, 8],
+                    [7168, 1], [7168, 2], [7168, 4], [7168, 8],
+                    [8960, 1], [8960, 2], [8960, 4], [8960, 8],
+                    [9878, 1], [9878, 2], [9878, 4], [9878, 8],
+                ]
+    # <<< swkim
+
     else:
         raise ValueError('Unknown workflow name: %s' % wf_name)
     
@@ -384,7 +397,17 @@ class StagePerfModel:
             return pred
         else:
             # 1792 / 1024 * 0.0000000167 * 1000
+            # <<< swkim
+            # if 'Pipe' in self.stage_name:   # orca
+            #     lambda_1gb_per_big = 0.00167	# 100s (1000 * 100 ms)
+            #     s3_up_cost_big = 0.5
+            #     s3_down_cost_big = 0.04
+
+            #     return pred * num_func * num_vcpu * (1792 / 1024) * lambda_1gb_per_big * 1000 + (s3_up_cost_big + s3_down_cost_big) * num_func
+            # else:
+            #     return (pred * num_func * num_vcpu * 2.9225  + 0.02 * num_func) / 100000
             return (pred * num_func * num_vcpu * 2.9225  + 0.02 * num_func) / 100000
+            # <<< swkim
 
     def predict_tile(self, config, profile_path, num_samples, tile=95):
         mem, num_func = config  # Note that the config should be in config_pairs
@@ -542,7 +565,16 @@ class StagePerfModel:
             # 1000 is to convert from ms to s
             # We multiply 1e5 to the cost to make it more readable
             # s = cold_param + ' / 2 + ' + s
+            # <<< swkim
+            # if 'Pipe' in self.stage_name:   # orca
+            #     lambda_1gb_per_big = 0.00167	# 100s (1000 * 100 ms)
+            #     s3_up_cost_big = 0.5
+            #     s3_down_cost_big = 0.04
+            #     s = '(' + s + ') * ' + var_k + ' * ' + var_d + f' * {(1792/1024) * lambda_1gb_per_big * 1000} + {s3_up_cost_big + s3_down_cost_big} * ' + var_d
+            # else:
+            #     s = '(' + s + ') * ' + var_k + ' * ' + var_d + ' * 2.9225 + 0.02 * ' + var_d
             s = '(' + s + ') * ' + var_k + ' * ' + var_d + ' * 2.9225 + 0.02 * ' + var_d
+            # <<< swkim
         return s
 
     def __str__(self):
